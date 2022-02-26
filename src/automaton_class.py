@@ -30,25 +30,24 @@ class Automaton:
                 self.finals.add(state)
 
     def copy(self, n_st_a=None):
-        dfa = Automaton()
+        automaton = Automaton()
         states_dic = dict()
-        for state in self.states:
+
+        def create_state(state):
             st=states_dic.get(state,None)
-            
             if st is None:
                 st=state.copy(n_st_a)
                 states_dic[state]=st
-                dfa.add_state(st)
+                automaton.add_state(st)
+            return st    
 
+        for state in self.states:
+            st=create_state(state)
             for s, to in chain(state.transitions.items(), zip(repeat(None), state.epsilon_transitions)):
-                n_dest=states_dic.get(to,None)
-                if n_dest is None:
-                    n_dest = to.copy(n_st_a)
-                    states_dic[to] = n_dest
-                    dfa.add_state(n_dest)
-                states_dic[s] = n_dest
-        dfa.start = states_dic[self.start]
-        return dfa
+                n_dest=create_state(to)
+                st[s] = n_dest
+        automaton.start = states_dic[self.start]
+        return automaton
 
     def upd_stars(self):
         a = self.copy()
