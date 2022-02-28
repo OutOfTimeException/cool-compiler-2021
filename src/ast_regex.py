@@ -17,7 +17,7 @@ NONDIGIT = ALPHABET - DIGIT
 def any_escaper(left: Token |None, right: Token |None):
     if left.lexeme == "." and right.lexeme == "." or left.lexeme =="\\" and right.lexeme != ".":
         lex = right.lexeme
-        res= DIGIT if lex=="d" else NONDIGIT if lex=="D" else ALPHABET
+        res= DIGIT if lex=="d" else NONDIGIT if lex=="D" else ALPHABET if lex=="." else lex
         return res
     return {right.lexeme}
 
@@ -52,7 +52,7 @@ class TOKEN_TYPE(Enum):
 @dataclass
 class Node(ABC):
     @abstractmethod
-    def _shift(self):
+    def shift(self):
         pass
 
 
@@ -61,19 +61,25 @@ class BinaryNode(Node, ABC):
         self.left:Node | Token=left
         self.right:Node | Token=right
 
+    def __str__(self) -> str:
+        return f"LEFT: {self.left} \ RIGHT: {self.right}"    
+
 
 class UnaryNode(Node, ABC):
     def __init__(self,left:Node|Token):
         self.left=left
+
+    def __str__(self) -> str:
+        return f"LEFT: {self.left}"
 
 # A | B
 class UnionNode(BinaryNode):
     def __init__(self, left: Node | Token, right: Node | Token):
         super().__init__(left, right)
 
-    def _shift(self):
-        left = self.left._shift()
-        right = self.right._shift()
+    def shift(self):
+        left :Automaton= self.left.shift()
+        right:Automaton = self.right.shift()
         return left | right
 
 # A + B
@@ -81,9 +87,9 @@ class ConcatenationNode(BinaryNode):
     def __init__(self, left: Node | Token, right: Node | Token):
         super().__init__(left, right)
 
-    def _shift(self):
-        left = self.left._shift()
-        right = self.right._shift()
+    def shift(self):
+        left :Automaton= self.left.shift()
+        right:Automaton = self.right.shift()
         return left + right
 
 #s* 0-many times
@@ -91,8 +97,8 @@ class ClousureStarNode(UnaryNode):
     def __init__(self, left: Node | Token):
         super().__init__(left)
 
-    def _shift(self):
-        left = self.left._shift()
+    def shift(self):
+        left:Automaton = self.left.shift()
         res = left.upd_stars()
         return res.upd_finals()
 
@@ -101,8 +107,8 @@ class ClousurePlusNode(UnaryNode):
     def __init__(self, left: Node | Token):
         super().__init__(left)
 
-    def _shift(self):
-        left = self.left._shift()
+    def shift(self):
+        left: Automaton = self.left.shift()
         left0 = left.copy()
         left1 = left.copy()
         r = left1.upd_stars()
@@ -115,8 +121,8 @@ class ClousureMayNode(UnaryNode):
     def __init__(self, left: Node | Token):
         super().__init__(left)
 
-    def _shift(self):
-        left = self.left._shift()
+    def shift(self):
+        left:Automaton = self.left.shift()
         return left.upd_stars()
 
 #(c)
@@ -124,16 +130,16 @@ class GrouperNode(UnaryNode):
     def __init__(self, left: Node | Token):
         super().__init__(left)
 
-    def _shift(self):
-        return self.left._shift()
+    def shift(self):
+        return self.left.shift()
 
 #[ElemSet]
 class SetterNode(UnaryNode):
     def __init__(self, left: Node | Token):
         super().__init__(left)
 
-    def _shift(self):
-        rang=self.left._shift()
+    def shift(self):
+        rang=self.left.shift()
         return transitions_appender(rang)
 
 #[^ ElemSet]
@@ -141,8 +147,8 @@ class NoSetterNode(UnaryNode):
     def __init__(self, left: Node | Token):
         super().__init__(left)
 
-    def _shift(self):
-        alphabet = ALPHABET - self.left._shift()
+    def shift(self):
+        alphabet = ALPHABET - self.left.shift()
         return transitions_appender(alphabet)
 
 # . or \
@@ -150,7 +156,7 @@ class AnyEscaperNode(BinaryNode):
     def __init__(self, left: Node | Token, right: Node | Token):
         super().__init__(left, right)
 
-    def _shift(self):
+    def shift(self):
         return transitions_appender(any_escaper(self.left,self.right))
 
 # May be a . \ or token 
@@ -158,15 +164,15 @@ class ElemSetComNode(BinaryNode):
     def __init__(self, left: Node | Token, right: Node | Token):
         super().__init__(left, right)
 
-    def _shift(self):
+    def shift(self):
         left=any_escaper(self.left.left,self.left.right) if isinstance(self.left , AnyEscaperNode) else None
-        left=self.left.lexeme if isinstance(self.left , Token) else left
+        left={self.left.lexeme} if isinstance(self.left , Token) else left
 
         right=any_escaper(self.right.left,self.right.right) if isinstance(self.right , AnyEscaperNode) else None
-        right=self.right.lexeme if isinstance(self.right , Token) else right
+        right={self.right.lexeme} if isinstance(self.right , Token) else right
 
-        f_left = self.left._shift() if left is None else left
-        f_right = self.right._shift() if right is None else right
+        f_left = left if left else self.left.shift()
+        f_right = right if right else self.right.shift()
         return set(chain(f_left, f_right))
 
 #[a-c] abc
@@ -174,19 +180,22 @@ class RangeNode(BinaryNode):
     def __init__(self, left: Node | Token, right: Node | Token):
         super().__init__(left, right)
 
-    def _shift(self):
+    def shift(self):
         left = self.left.lexeme
         right = self.right.lexeme
         if ord(left) > ord(right):
             raise Exception("Invalid Input Range Order")
-        chars = [chr(x) for x in range(ord(left), ord(right) + 1)]
-        return set(chars)
+        
+        chars=set()    
+        for x in range(ord(left),ord(right)+1):
+            chars.add(chr(x))
+        return chars
 
-# a Token Char needs to be converted into a automaton to have a way to be _shifted 
+# a Token Char needs to be converted into a automaton to have a way to be shifted 
 class CharNode(UnaryNode):
     def __init__(self, left: Node | Token):
         super().__init__(left)
 
-    def _shift(self):
+    def shift(self):
         tag = self.left.lexeme
         return transitions_appender([tag])
