@@ -1,5 +1,6 @@
 from collections import deque
 from itertools import repeat,chain
+from turtle import pen
 from typing import Set
 from state_class import State
 
@@ -22,12 +23,12 @@ class Automaton:
                 state.name += self.counter
                 self.counter += 1
                 self.add_state(state)
-            self.states.add(state)
 
             if self.start is None:
                 self.start=state
             if state.final:
                 self.finals.add(state)
+            self.states.add(state)
 
     def copy(self, n_st_a=None):
         automaton = Automaton()
@@ -81,11 +82,11 @@ class Automaton:
         pending= deque([start])
 
         while pending:
-            e_clousure_state = pending.popleft()
-            state = states_list[e_clousure_state]
-            s_vocabulary=vocabulary_f(e_clousure_state)
+            clousure_state = pending.popleft()
+            state = states_list[clousure_state]
+            s_vocabulary=vocabulary_f(clousure_state)
             for symbol in s_vocabulary:
-                goto = goto_func(e_clousure_state, symbol)
+                goto = goto_func(clousure_state, symbol)
                 clousure = closure_func(goto)
                 new_state=states_list.get(clousure,None)
 
@@ -111,11 +112,11 @@ class Automaton:
         pending = list(states)
         clousure = set()
         while pending:
-            state = pending.pop()
+            state:State = pending.pop()
             clousure.add(state)
             for elem in state.epsilon_transitions:
                 if elem not in clousure:
-                    clousure.add(elem)
+                    pending.append(elem)
         return tuple(sorted(clousure,key=hash))
 
     @staticmethod
